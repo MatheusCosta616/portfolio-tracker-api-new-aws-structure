@@ -100,3 +100,43 @@ SECTOR_RULES: dict[str, dict[str, object]] = {
         "phrase_weights": {},
     },
 }
+
+
+# Frases cuja polaridade independe do setor. Existem para resolver termos que,
+# sozinhos, seriam ambiguos demais para entrar no lexico. O caso classico e
+# "juros": negativo em "alta de juros", positivo em "juros sobre capital
+# proprio". A frase mais longa vence a mais curta.
+PHRASE_POLARITY: dict[str, float] = {
+    # Proventos
+    "juros sobre capital proprio": 0.55,
+    "jcp": 0.45,
+    "pagamento de dividendos": 0.50,
+    "distribuicao de proventos": 0.50,
+    "aumento de dividendos": 0.60,
+    "dividend increase": 0.60,
+    "special dividend": 0.55,
+    # Resultado
+    "lucro recorde": 0.75,
+    "lucro liquido": 0.35,
+    "record profit": 0.75,
+    "acima do esperado": 0.55,
+    "abaixo do esperado": -0.55,
+    "above expectations": 0.55,
+    "below expectations": -0.55,
+    "reversao de prejuizo": 0.60,
+    "prejuizo liquido": -0.70,
+    # Macro / juros
+    "alta de juros": -0.35,
+    "aumento dos juros": -0.35,
+    "elevacao dos juros": -0.35,
+    "corte de juros": 0.35,
+    "reducao dos juros": 0.35,
+    "rate hike": -0.35,
+    "rate cut": 0.35,
+    # Governanca / risco
+    "acao judicial": -0.45,
+    "processo judicial": -0.45,
+    "investigacao da cvm": -0.65,
+    "pedido de recuperacao judicial": -0.95,
+    "fato relevante": 0.0,
+}

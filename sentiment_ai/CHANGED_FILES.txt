@@ -1,9 +1,19 @@
 ARQUIVOS EXISTENTES MODIFICADOS
-- news/models.py
-- portifolio_tracker_api/settings.py
+- news/models.py                        (somente a classe Analysis)
+- portifolio_tracker_api/settings.py    (INSTALLED_APPS, SENTIMENT_*, LLM_*, LOGGING)
+- portifolio_tracker_api/urls.py        (rota de feedback)
+- portfolios/tasks.py                   (fonte pt-BR na analise sob demanda)
+- .env.example                          (nomes das variaveis novas, sem valores)
+
+ARQUIVOS NOVOS FORA DO DIRETORIO sentiment_ai
+- news/migrations/0004_analysis_language_report_dedup.py
+- feedback/                             (app novo, isolado do motor de analise)
+
+NAO ALTERADOS
 - docker-compose.yml
-
-ARQUIVO NOVO FORA DO DIRETÓRIO sentiment_ai
-- news/migrations/0003_analysis_queue_fields.py
-
-NENHUM OUTRO ARQUIVO DO PROJETO ORIGINAL FOI ALTERADO.
+- news/tasks.py, news/controller.py, news/dto.py, news/fetchers/
+- portfolios/controller.py, portfolios/dto.py
+- users/, notifications/, core/
+- aplicativo Expo
+- requirements.txt
+- .github/workflows/qa.yml

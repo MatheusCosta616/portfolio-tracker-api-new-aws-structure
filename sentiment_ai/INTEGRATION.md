@@ -1,101 +1,102 @@
-# Alterações externas mínimas
+# Alterações fora do diretório `sentiment_ai/`
 
-A integração foi desenhada para não alterar o fluxo de notícias, as views, os
-serializers, o mobile ou as tasks existentes. Somente três arquivos existentes
-foram editados e uma migration foi adicionada.
+A integração continua desenhada para tocar o mínimo possível fora do módulo.
+Este documento substitui a versão anterior e lista o estado atual.
 
-## 1. Copiar o diretório
+## 1. `news/models.py` — somente a classe `Analysis`
 
-Copie `sentiment_ai/` para a raiz do projeto, ao lado de `news/`, `portfolios/`
-e `notifications/`.
+`NewsSource` e `NewsArticle` **não** foram tocadas.
 
-## 2. `news/models.py`
+Campos adicionados, todos aceitando nulo ou com padrão vazio, para não quebrar
+as linhas já gravadas:
 
-Substitua somente a classe `Analysis` pela versão abaixo. As classes
-`NewsSource` e `NewsArticle` permanecem como estavam.
+| Campo | Para quê |
+|---|---|
+| `language` | idioma resolvido, consultável e reaproveitado pelo worker |
+| `engine` | qual motor produziu a análise |
+| `sentiment_label` | rótulo, para filtrar sem abrir o JSON |
+| `sentiment_score` | nota |
+| `relevance_score` | relevância |
+| `report` | relatório curto em português |
+| `news_fingerprint` | identidade canônica da notícia |
+| `llm_used` | se a LLM externa produziu o resultado |
+| `fallback_reason` | por que houve fallback, quando houve |
+| `queued_at` | quando o ID foi publicado na fila |
 
-```python
-class Analysis(models.Model):
-    """Sentiment-analysis request and result for one article and ticker."""
-
-    class Status(models.TextChoices):
-        PENDING = 'pending', 'Pendente'
-        PROCESSING = 'processing', 'Processando'
-        COMPLETED = 'completed', 'Concluída'
-        FAILED = 'failed', 'Falhou'
-
-    article = models.ForeignKey('NewsArticle', on_delete=models.CASCADE, related_name='analyses')
-    ticker = models.CharField(max_length=20, blank=True, default='', db_index=True)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
-    analise = models.TextField(blank=True, default='')
-    model_version = models.CharField(max_length=50, default='rules-v2.0.0')
-    attempts = models.PositiveSmallIntegerField(default=0)
-    last_error = models.TextField(blank=True, default='')
-    started_at = models.DateTimeField(null=True, blank=True)
-    finished_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'analises'
-        ordering = ['created_at', 'id']
-
-    def __str__(self):
-        return f'Analysis #{self.pk} ({self.ticker or "sem ticker"}) - {self.status}'
-```
-
-## 3. Migration
-
-Copie o arquivo entregue em:
-
-```text
-news/migrations/0003_analysis_queue_fields.py
-```
-
-Ele somente amplia a tabela existente `analises`. Não cria tabelas novas para a
-IA e não apaga dados anteriores.
-
-## 4. `portifolio_tracker_api/settings.py`
-
-Adicione uma única linha ao final de `INSTALLED_APPS`:
+E a constraint que garante a deduplicação no banco:
 
 ```python
-'sentiment_ai.apps.SentimentAIConfig',
+models.UniqueConstraint(
+    fields=['article', 'ticker', 'model_version'],
+    name='uq_analise_art_tic_ver',
+)
 ```
 
-Não é necessário alterar as configurações do Celery. A publicação informa a
-fila explicitamente.
+O nome é curto de propósito: Oracle 11g/12.1 limita identificadores a 30
+caracteres.
 
-## 5. `docker-compose.yml`
+## 2. `news/migrations/0004_analysis_language_report_dedup.py`
 
-Adicione o serviço `sentiment-worker` presente no projeto completo. Ele usa:
+Migration nova. Adiciona as colunas, **remove duplicatas históricas** da tripla
+`(article, ticker, model_version)` e só então cria a constraint — sem esse passo
+do meio a constraint não pode ser criada numa base que já rodou em produção.
 
-```text
--Q sentiment_analysis
---concurrency=1
---prefetch-multiplier=1
-```
-
-O worker geral existente não precisa ser alterado.
-
-## 6. Aplicar
+Rollback:
 
 ```bash
-docker compose up --build
+python manage.py migrate news 0003_analysis_queue_fields
 ```
 
-O comando atual da API já executa `python manage.py migrate --fake-initial`,
-portanto a nova migration será aplicada na inicialização.
+A reversão remove a constraint e as colunas novas. Nenhum resultado é perdido: o
+campo `analise`, que guarda o JSON completo, nunca é tocado. A remoção de linhas
+duplicadas **não** é revertida — linhas apagadas não voltam.
 
-## Arquivos que não foram alterados
+## 3. `portifolio_tracker_api/settings.py`
 
-- `news/tasks.py`;
-- `news/views.py`;
-- `news/serializers.py`;
-- `portfolios/views.py`;
-- `portfolios/serializers.py`;
-- aplicativo Expo;
-- `requirements.txt` da raiz.
+* `INSTALLED_APPS` ganhou `'feedback'` (o `sentiment_ai` já estava lá);
+* bloco de configuração do sentimento (`SENTIMENT_*`);
+* bloco de configuração da LLM (`LLM_*`), tudo lido do ambiente;
+* `LOGGING` estruturado — o projeto não tinha nenhum.
 
-A dependência adicional da IA é instalada somente pelo
-`sentiment_ai/Dockerfile`.
+## 4. `portifolio_tracker_api/urls.py`
+
+Uma linha: `path('api/feedback/', include('feedback.urls'))`.
+
+## 5. `portfolios/tasks.py` — a correção do P0
+
+`analyse_portfolio` instanciava **somente** o `YFinanceFetcher`, que devolve
+matéria em inglês. Era por isso que o motor nunca via notícia em português: não
+era o motor que ignorava pt-BR, era o pipeline que nunca entregava.
+
+Agora a task percorre as fontes de `SENTIMENT_ANALYSIS_SOURCES`
+(`yfinance` + `google_news`, o segundo consultado com `hl=pt-BR&gl=BR` pelo
+próprio fetcher, que **não** foi alterado), deduplica URLs entre as fontes e
+segue chamando `request_analysis` como antes. Uma fonte fora do ar não derruba a
+análise inteira. O limite de tempo da task subiu de 90/120s para 240/300s,
+alinhado ao `--soft-time-limit=240` já usado pelo worker geral.
+
+## 6. `docker-compose.yml`
+
+**Não foi alterado.** O serviço `sentiment-worker` já existia e continua válido.
+Para ligar a LLM, acrescente as variáveis `LLM_*` ao serviço `sentiment-worker`.
+
+## 7. App novo `feedback/`
+
+App Django separado, isolado por exigência do próprio enunciado: nenhuma linha
+dele importa `sentiment_ai`. Endpoints `POST /api/feedback/` e
+`GET /api/feedback/list` (este restrito a staff).
+
+## Arquivos que continuam intactos
+
+* `news/tasks.py`
+* `news/controller.py`
+* `news/dto.py` — não foi preciso: o JSON completo já trafega no campo `result`,
+  então os campos novos chegam ao cliente sem mudar o serializer
+* `news/fetchers/` — inclusive o `GoogleNewsFetcher`
+* `portfolios/controller.py` e `portfolios/dto.py`
+* `users/`, `notifications/`, `core/`
+* o aplicativo Expo
+* `requirements.txt` da raiz — a integração de LLM usa `requests`, que já é
+  dependência do projeto
+* `docker-compose.yml`
+* `.github/workflows/qa.yml`
