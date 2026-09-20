@@ -1,0 +1,157 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.1
+    container_name: portfolio_keycloak
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      JAVA_OPTS_APPEND: "-Xmx320m"
+    command: start-dev --import-realm
+    ports:
+      - "8080:8080"
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./keycloak:/opt/keycloak/data/import
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/8080'"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: portfolio_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: portfolio
+      RABBITMQ_DEFAULT_PASS: portfolio123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  api:
+    build: .
+    container_name: portfolio_api
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=minha-chave-secreta-muito-louca
+      - DB_NAME=orcl
+      - DB_USER=rm551157
+      - DB_PASSWORD=121104
+      - DB_HOST=oracle.fiap.com.br
+      - DB_PORT=1521
+      - ALLOWED_HOSTS=*
+      - KEYCLOAK_SERVER_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=portfolio
+      - KEYCLOAK_CLIENT_ID=portfolio-api
+      - CELERY_BROKER_URL=amqp://portfolio:portfolio123@rabbitmq:5672/
+      - CELERY_RESULT_BACKEND=rpc://
+    ports:
+      - "8000:8000"
+    command: >
+      bash -c "python manage.py migrate --fake-initial &&
+               gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 60 portifolio_tracker_api.wsgi:application"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/8000'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  celery-worker:
+    build: .
+    container_name: portfolio_celery_worker
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=minha-chave-secreta-muito-louca
+      - DB_NAME=orcl
+      - DB_USER=rm551157
+      - DB_PASSWORD=121104
+      - DB_HOST=oracle.fiap.com.br
+      - DB_PORT=1521
+      - KEYCLOAK_SERVER_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=portfolio
+      - KEYCLOAK_CLIENT_ID=portfolio-api
+      - CELERY_BROKER_URL=amqp://portfolio:portfolio123@rabbitmq:5672/
+      - CELERY_RESULT_BACKEND=rpc://
+    command: celery -A portifolio_tracker_api worker --loglevel=info --soft-time-limit=240 --time-limit=300
+
+  sentiment-worker:
+    build:
+      context: .
+      dockerfile: sentiment_ai/Dockerfile
+    container_name: portfolio_sentiment_worker
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=minha-chave-secreta-muito-louca
+      - DB_NAME=orcl
+      - DB_USER=rm551157
+      - DB_PASSWORD=121104
+      - DB_HOST=oracle.fiap.com.br
+      - DB_PORT=1521
+      - KEYCLOAK_SERVER_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=portfolio
+      - KEYCLOAK_CLIENT_ID=portfolio-api
+      - CELERY_BROKER_URL=amqp://portfolio:portfolio123@rabbitmq:5672/
+      - CELERY_RESULT_BACKEND=rpc://
+    command: 
+      celery -A portifolio_tracker_api worker
+      --loglevel=info
+      -Q sentiment_analysis
+      --concurrency=1
+      --prefetch-multiplier=1
+      --soft-time-limit=150
+      --time-limit=180
+
+  celery-beat:
+    build: .
+    container_name: portfolio_celery_beat
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=minha-chave-secreta-muito-louca
+      - DB_NAME=orcl
+      - DB_USER=rm551157
+      - DB_PASSWORD=121104
+      - DB_HOST=oracle.fiap.com.br
+      - DB_PORT=1521
+      - KEYCLOAK_SERVER_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=portfolio
+      - KEYCLOAK_CLIENT_ID=portfolio-api
+      - CELERY_BROKER_URL=amqp://portfolio:portfolio123@rabbitmq:5672/
+      - CELERY_RESULT_BACKEND=rpc://
+    command: celery -A portifolio_tracker_api beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+volumes:
+  keycloak_data:
+  rabbitmq_data:

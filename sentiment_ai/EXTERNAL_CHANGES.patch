@@ -1,0 +1,161 @@
+--- a/news/models.py
++++ b/news/models.py
+@@ -2,16 +2,32 @@
+ 
+ 
+ class Analysis(models.Model):
+-    """Sentiment analysis produced by IA over a news article."""
++    """Sentiment-analysis request and result for one article and ticker."""
++
++    class Status(models.TextChoices):
++        PENDING = 'pending', 'Pendente'
++        PROCESSING = 'processing', 'Processando'
++        COMPLETED = 'completed', 'Concluída'
++        FAILED = 'failed', 'Falhou'
++
+     article = models.ForeignKey('NewsArticle', on_delete=models.CASCADE, related_name='analyses')
+-    analise = models.TextField()
++    ticker = models.CharField(max_length=20, blank=True, default='', db_index=True)
++    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
++    analise = models.TextField(blank=True, default='')
++    model_version = models.CharField(max_length=50, default='rules-v2.0.0')
++    attempts = models.PositiveSmallIntegerField(default=0)
++    last_error = models.TextField(blank=True, default='')
++    started_at = models.DateTimeField(null=True, blank=True)
++    finished_at = models.DateTimeField(null=True, blank=True)
+     created_at = models.DateTimeField(auto_now_add=True)
++    updated_at = models.DateTimeField(auto_now=True)
+ 
+     class Meta:
+         db_table = 'analises'
++        ordering = ['created_at', 'id']
+ 
+     def __str__(self):
+-        return f'Analysis #{self.pk} for article #{self.article_id}'
++        return f'Analysis #{self.pk} ({self.ticker or "sem ticker"}) - {self.status}'
+ 
+ 
+ class NewsSource(models.Model):
+--- a/portifolio_tracker_api/settings.py
++++ b/portifolio_tracker_api/settings.py
+@@ -32,6 +32,7 @@
+     'portfolios',
+     'news',
+     'notifications',
++    'sentiment_ai.apps.SentimentAIConfig',
+ ]
+ 
+ MIDDLEWARE = [
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -94,6 +94,37 @@
+       - CELERY_RESULT_BACKEND=rpc://
+     command: celery -A portifolio_tracker_api worker --loglevel=info
+ 
++  sentiment-worker:
++    build:
++      context: .
++      dockerfile: sentiment_ai/Dockerfile
++    container_name: portfolio_sentiment_worker
++    restart: always
++    depends_on:
++      rabbitmq:
++        condition: service_healthy
++      api:
++        condition: service_healthy
++    environment:
++      - DEBUG=True
++      - SECRET_KEY=minha-chave-secreta-muito-louca
++      - DB_NAME=orcl
++      - DB_USER=rm551157
++      - DB_PASSWORD=121104
++      - DB_HOST=oracle.fiap.com.br
++      - DB_PORT=1521
++      - KEYCLOAK_SERVER_URL=http://keycloak:8080
++      - KEYCLOAK_REALM=portfolio
++      - KEYCLOAK_CLIENT_ID=portfolio-api
++      - CELERY_BROKER_URL=amqp://portfolio:portfolio123@rabbitmq:5672/
++      - CELERY_RESULT_BACKEND=rpc://
++    command: >
++      celery -A portifolio_tracker_api worker
++      --loglevel=info
++      -Q sentiment_analysis
++      --concurrency=1
++      --prefetch-multiplier=1
++
+   celery-beat:
+     build: .
+     container_name: portfolio_celery_beat
+--- a/news/migrations/0003_analysis_queue_fields.py
++++ b/news/migrations/0003_analysis_queue_fields.py
+@@ -0,0 +1,70 @@
++from django.db import migrations, models
++
++
++class Migration(migrations.Migration):
++
++    dependencies = [
++        ('news', '0002_analysis'),
++    ]
++
++    operations = [
++        migrations.AddField(
++            model_name='analysis',
++            name='attempts',
++            field=models.PositiveSmallIntegerField(default=0),
++        ),
++        migrations.AddField(
++            model_name='analysis',
++            name='finished_at',
++            field=models.DateTimeField(blank=True, null=True),
++        ),
++        migrations.AddField(
++            model_name='analysis',
++            name='last_error',
++            field=models.TextField(blank=True, default=''),
++        ),
++        migrations.AddField(
++            model_name='analysis',
++            name='model_version',
++            field=models.CharField(default='rules-v2.0.0', max_length=50),
++        ),
++        migrations.AddField(
++            model_name='analysis',
++            name='started_at',
++            field=models.DateTimeField(blank=True, null=True),
++        ),
++        migrations.AddField(
++            model_name='analysis',
++            name='status',
++            field=models.CharField(
++                choices=[
++                    ('pending', 'Pendente'),
++                    ('processing', 'Processando'),
++                    ('completed', 'Concluída'),
++                    ('failed', 'Falhou'),
++                ],
++                db_index=True,
++                default='pending',
++                max_length=20,
++            ),
++        ),
++        migrations.AddField(
++            model_name='analysis',
++            name='ticker',
++            field=models.CharField(blank=True, db_index=True, default='', max_length=20),
++        ),
++        migrations.AddField(
++            model_name='analysis',
++            name='updated_at',
++            field=models.DateTimeField(auto_now=True),
++        ),
++        migrations.AlterField(
++            model_name='analysis',
++            name='analise',
++            field=models.TextField(blank=True, default=''),
++        ),
++        migrations.AlterModelOptions(
++            name='analysis',
++            options={'ordering': ['created_at', 'id']},
++        ),
++    ]

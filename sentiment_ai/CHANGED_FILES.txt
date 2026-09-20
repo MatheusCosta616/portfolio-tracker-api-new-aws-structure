@@ -1,0 +1,9 @@
+ARQUIVOS EXISTENTES MODIFICADOS
+- news/models.py
+- portifolio_tracker_api/settings.py
+- docker-compose.yml
+
+ARQUIVO NOVO FORA DO DIRETÓRIO sentiment_ai
+- news/migrations/0003_analysis_queue_fields.py
+
+NENHUM OUTRO ARQUIVO DO PROJETO ORIGINAL FOI ALTERADO.

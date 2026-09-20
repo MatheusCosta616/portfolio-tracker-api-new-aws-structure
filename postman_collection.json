@@ -1,0 +1,373 @@
+{
+  "info": {
+    "name": "Portifolio Tracker API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "portfolio_id",
+      "value": "1"
+    },
+    {
+      "key": "analysis_id",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/register",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"investidor@example.com\",\n  \"username\": \"investidor\",\n  \"password\": \"strongpass123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.access) {",
+                  "  pm.collectionVariables.set('access_token', json.access);",
+                  "  console.log('Token salvo com sucesso');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"investidor@example.com\",\n  \"password\": \"strongpass123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Me (perfil autenticado)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/me",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          }
+        },
+        {
+          "name": "Me (atualizar perfil)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/auth/me",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"novo_nome\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Carteiras (Portfolios)",
+      "item": [
+        {
+          "name": "Listar Carteiras",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/portfolios",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          }
+        },
+        {
+          "name": "Criar Carteira",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.id) {",
+                  "  pm.collectionVariables.set('portfolio_id', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/portfolios",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Minha Carteira Principal\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Detalhe da Carteira",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/portfolios/{{portfolio_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          }
+        },
+        {
+          "name": "Atualizar Carteira",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/portfolios/{{portfolio_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Carteira Renda Variável\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Deletar Carteira",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/portfolios/{{portfolio_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ativos (Assets)",
+      "item": [
+        {
+          "name": "Listar Ativos da Carteira",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/portfolios/{{portfolio_id}}/assets",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          }
+        },
+        {
+          "name": "Adicionar Ativo — Ação",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/portfolios/{{portfolio_id}}/assets",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticker\": \"PETR4\",\n  \"name\": \"Petrobras\",\n  \"asset_type\": \"stock\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Adicionar Ativo — FII",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/portfolios/{{portfolio_id}}/assets",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticker\": \"HGLG11\",\n  \"name\": \"CSHG Logística\",\n  \"asset_type\": \"fii\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Adicionar Ativo — Crypto",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/portfolios/{{portfolio_id}}/assets",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticker\": \"BTC-USD\",\n  \"name\": \"Bitcoin\",\n  \"asset_type\": \"crypto\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Adicionar Ativo — ETF",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/portfolios/{{portfolio_id}}/assets",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticker\": \"BOVA11\",\n  \"name\": \"iShares Ibovespa\",\n  \"asset_type\": \"etf\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Remover Ativo",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/portfolios/{{portfolio_id}}/assets/1",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notícias",
+      "item": [
+        {
+          "name": "Feed Global (todos os ativos)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/news",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          }
+        },
+        {
+          "name": "Notícias por Carteira",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/news/portfolio/{{portfolio_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Análise de Sentimento (IA)",
+      "item": [
+        {
+          "name": "🚀 Disparar Análise da Carteira",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.analyses && json.analyses.length > 0) {",
+                  "  pm.collectionVariables.set('analysis_id', json.analyses[0].id);",
+                  "  console.log('analyses criadas: ' + json.analyses.length);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/portfolios/{{portfolio_id}}/analyse",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "description": "Busca as notícias mais recentes dos ativos da carteira, salva no banco com status=pending e envia para a fila da IA processar.\n\nRetorna 202 Accepted com a lista de análises criadas/encontradas (status pode ser pending, processing ou completed).\n\nApós chamar este endpoint, chame 'Listar Análises' para ver o resultado quando status=completed."
+          }
+        },
+        {
+          "name": "📋 Listar Análises da Carteira",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/portfolios/{{portfolio_id}}/analyses",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "description": "Lista todas as análises de sentimento dos ativos da carteira.\n\nCampos:\n- status: pending | processing | completed | failed\n- result: null (pendente) ou objeto JSON com sentiment, score, summary\n- ticker: ativo analisado\n- article_title: título da notícia analisada"
+          }
+        },
+        {
+          "name": "🔍 Detalhe de uma Análise",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/news/analyses/{{analysis_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "description": "Retorna o detalhe completo de uma análise específica, incluindo o resultado da IA quando status=completed."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notificações Push",
+      "item": [
+        {
+          "name": "Registrar Token FCM",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/notifications/device-token",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"fcm-device-token-exemplo-aqui\",\n  \"platform\": \"android\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Desativar Token FCM",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/notifications/device-token",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"fcm-device-token-exemplo-aqui\"\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+name: Backend QA
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      qa_base_url:
+        description: Deployed API base URL
+        required: false
+        default: http://52.3.97.206:8000
+      run_mutating_remote_checks:
+        description: Create temporary QA users on the deployed API
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  static-and-unit:
+    name: Syntax and Django tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DJANGO_SETTINGS_MODULE: portifolio_tracker_api.settings
+      DEBUG: "False"
+      SECRET_KEY: ${{ secrets.QA_SECRET_KEY }}
+      DB_NAME: ${{ secrets.QA_DB_NAME }}
+      DB_USER: ${{ secrets.QA_DB_USER }}
+      DB_PASSWORD: ${{ secrets.QA_DB_PASSWORD }}
+      DB_HOST: ${{ secrets.QA_DB_HOST }}
+      DB_PORT: ${{ secrets.QA_DB_PORT || '1521' }}
+      KEYCLOAK_SERVER_URL: ${{ secrets.QA_KEYCLOAK_SERVER_URL || 'http://localhost:8080' }}
+      KEYCLOAK_REALM: portfolio
+      KEYCLOAK_CLIENT_ID: portfolio-api
+      CELERY_BROKER_URL: amqp://guest:guest@localhost:5672/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Compile Python sources
+        run: python -m compileall -q .
+
+      - name: Run Django test suite
+        run: python -m pytest -q --junitxml=qa-results/django-tests.xml
+
+      - name: Upload Django test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: django-test-report
+          path: qa-results/django-tests.xml
+          if-no-files-found: ignore
+
+  remote-smoke:
+    name: Deployed API smoke QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install smoke-test dependency
+        run: python -m pip install requests
+
+      - name: Run remote smoke checks
+        env:
+          QA_BASE_URL: ${{ inputs.qa_base_url || 'http://52.3.97.206:8000' }}
+          QA_RUN_MUTATING: ${{ inputs.run_mutating_remote_checks || 'false' }}
+          QA_REPORT: qa-results/remote-smoke.xml
+        run: python scripts/qa_remote.py
+
+      - name: Upload remote QA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-smoke-report
+          path: qa-results/remote-smoke.xml
+          if-no-files-found: ignore
