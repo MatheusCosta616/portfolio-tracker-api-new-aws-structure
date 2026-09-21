@@ -6,6 +6,7 @@ import oracledb
 # oracledb is the modern replacement for cx_Oracle; register it so Django's oracle backend finds it
 oracledb.version = "8.3.0"
 sys.modules["cx_Oracle"] = oracledb
+oracledb.defaults.fetch_lobs = False
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
